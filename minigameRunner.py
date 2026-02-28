@@ -3,6 +3,15 @@ import importlib
 import os
 import random
 import pygame
+import socket
+
+# --- NETWORK CONFIGURATION ---
+# Replace these with the static IPs of your Raspberry Pis
+PI_IPS = {
+    "Team A": "192.168.1.10",  # Blue Car Pi
+    "Team B": "192.168.1.11"  # Pink Car Pi
+}
+UDP_PORT = 5005
 
 
 class GameHandler:
@@ -22,10 +31,11 @@ class GameHandler:
         # Persistent Stats (Wins Counter)
         self.total_wins = {"Team A": 0, "Team B": 0}
 
-        # UI Layout: Persistent Header for Score, Frame for Games
+        # UI Layout
         self.header = tk.Frame(self.root, bg="#111", height=50)
         self.header.pack(side="top", fill="x")
 
+        # Applied Color Rule: Team A = Blue, Team B = Pink
         self.score_label = tk.Label(
             self.header,
             text="Team A: 0  |  Team B: 0",
@@ -41,23 +51,28 @@ class GameHandler:
         self.game_list = []
         self.current_game_index = 0
 
-        # ORDER OF OPERATIONS: START WITH CALIBRATION
         self.show_calibration()
+
+    def send_win_network_signal(self, winner):
+        """Sends a UDP packet to the winning car's Pi to increment its permanent speed."""
+        if winner in PI_IPS:
+            try:
+                ip = PI_IPS[winner]
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.sendto(b"WIN", (ip, UDP_PORT))
+                print(f"NETWORK: Win signal sent to {winner} at {ip}")
+            except Exception as e:
+                print(f"NETWORK ERROR: Could not reach {winner} - {e}")
 
     def update_score_display(self):
         self.score_label.config(text=f"Team A: {self.total_wins['Team A']}  |  Team B: {self.total_wins['Team B']}")
 
     def refresh_game_list(self):
-        """Finds all games and shuffles them."""
         all_games = [f[:-3] for f in os.listdir(self.games_dir) if f.endswith(".py") and f != "__init__.py"]
-
         last_game = self.game_list[-1] if self.game_list else None
         random.shuffle(all_games)
-
-        # Avoid repeat game on shuffle boundary
         if len(all_games) > 1 and all_games[0] == last_game:
             all_games.append(all_games.pop(0))
-
         self.game_list = all_games
         self.current_game_index = 0
 
@@ -65,20 +80,19 @@ class GameHandler:
         for widget in self.game_frame.winfo_children():
             widget.destroy()
 
-    # --- PHASE 1: CALIBRATION (ONCE) ---
     def show_calibration(self):
         self.clear_frame()
         self.ready_state = {"Team A": False, "Team B": False}
-
         tk.Label(self.game_frame, text="INITIAL SETUP", font=("Arial", 32, "bold"), fg="white", bg="black").pack(
             pady=40)
 
-        self.status_a = tk.Label(self.game_frame, text="Team A: PRESS 'A'", font=("Arial", 22), fg="red", bg="black")
+        # Color Rule applied to calibration
+        self.status_a = tk.Label(self.game_frame, text="Team A (BLUE): PRESS 'A'", font=("Arial", 22), fg="dodger blue",
+                                 bg="black")
         self.status_a.pack(pady=20)
-
-        self.status_b = tk.Label(self.game_frame, text="Team B: PRESS 'A'", font=("Arial", 22), fg="red", bg="black")
+        self.status_b = tk.Label(self.game_frame, text="Team B (PINK): PRESS 'A'", font=("Arial", 22), fg="pink",
+                                 bg="black")
         self.status_b.pack(pady=20)
-
         self.check_calibration_input()
 
     def check_calibration_input(self):
@@ -94,12 +108,10 @@ class GameHandler:
 
         if self.ready_state["Team A"] and self.ready_state["Team B"]:
             self.refresh_game_list()
-            # Transition to Countdown
             self.root.after(1000, lambda: self.start_one_time_countdown(3))
         else:
             self.root.after(20, self.check_calibration_input)
 
-    # --- PHASE 2: COUNTDOWN (ONCE) ---
     def start_one_time_countdown(self, count):
         self.clear_frame()
         if count > 0:
@@ -109,42 +121,32 @@ class GameHandler:
         else:
             self.launch_game()
 
-    # --- PHASE 3: CONTINUOUS LOOP ---
     def launch_game(self):
         self.clear_frame()
-
         if self.current_game_index >= len(self.game_list):
             self.refresh_game_list()
-
         module_name = f"{self.games_dir}.{self.game_list[self.current_game_index]}"
         game_module = importlib.import_module(module_name)
         importlib.reload(game_module)
-
         game_module.start_game(self.game_frame, self.handle_winner)
 
     def handle_winner(self, winner):
         self.clear_frame()
-
         if winner == "Tie":
-            print("RESULT: TIE")
-            tk.Label(self.game_frame, text="IT'S A TIE!", font=("Arial", 48, "bold"), fg="yellow", bg="black").pack(expand=True)
-            # Scores are NOT updated, and the hardware voltage script is NOT pinged.
+            tk.Label(self.game_frame, text="IT'S A TIE!", font=("Arial", 48, "bold"), fg="yellow", bg="black").pack(
+                expand=True)
         else:
-            print(f"WINNER: {winner}")
-            # Update persistent wins
             if winner in self.total_wins:
                 self.total_wins[winner] += 1
                 self.update_score_display()
 
-            # Display Winner Screen
-            color = "cyan" if winner == "Team A" else "magenta"
+                # --- NEW: PUSH WIN TO HARDWARE VIA NETWORK ---
+                self.send_win_network_signal(winner)
+
+            color = "dodger blue" if winner == "Team A" else "pink"
             tk.Label(self.game_frame, text=f"{winner.upper()} SCORES!", font=("Arial", 48, "bold"), fg=color,
                      bg="black").pack(expand=True)
 
-            # --- THIS IS WHERE YOU PUSH TO YOUR VOLTAGE CONTROLLER / DATABASE ---
-            # e.g., send_voltage_boost(winner)
-
-        # Loop directly back to launch_game (No countdown!)
         self.current_game_index += 1
         self.root.after(2000, self.launch_game)
 
