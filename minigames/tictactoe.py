@@ -8,7 +8,6 @@ BUTTON_A = 0
 AXIS_X = 0
 AXIS_Y = 1
 
-
 def start_game(parent_frame, on_game_over):
     # 1. Initialize Pygame Joysticks
     pygame.init()
@@ -29,8 +28,9 @@ def start_game(parent_frame, on_game_over):
         "turn": team_x,  # X always goes first
         "turn_start": time.time(),
         "cursors": {
-            "Team A": {"x": 300, "y": 300, "prev_a": False, "color": "cyan"},
-            "Team B": {"x": 300, "y": 300, "prev_a": False, "color": "magenta"}
+            # Team A is always Blue, Team B is always Pink
+            "Team A": {"x": 300, "y": 300, "prev_a": False, "color": "blue"},
+            "Team B": {"x": 300, "y": 300, "prev_a": False, "color": "pink"}
         }
     }
 
@@ -46,10 +46,11 @@ def start_game(parent_frame, on_game_over):
         canvas.create_line(0, 300, 600, 300, fill="white", width=4)
         canvas.create_line(0, 500, 600, 500, fill="white", width=4)
 
-        # Header Text
-        canvas.create_text(150, 50, text=f"Team A: {state['roles']['Team A']}", fill="cyan", font=("Arial", 20, "bold"))
-        canvas.create_text(450, 50, text=f"Team B: {state['roles']['Team B']}", fill="magenta",
-                           font=("Arial", 20, "bold"))
+        # Header Text (Now pulling colors dynamically from the state dictionary)
+        canvas.create_text(150, 50, text=f"Team A: {state['roles']['Team A']}",
+                           fill=state["cursors"]["Team A"]["color"], font=("Arial", 20, "bold"))
+        canvas.create_text(450, 50, text=f"Team B: {state['roles']['Team B']}",
+                           fill=state["cursors"]["Team B"]["color"], font=("Arial", 20, "bold"))
 
     draw_static_board()
 
@@ -85,7 +86,6 @@ def start_game(parent_frame, on_game_over):
         current_time = time.time()
         time_elapsed = current_time - state["turn_start"]
 
-        # CHANGED: 2.0 seconds instead of 1.0
         time_left = 2.0 - time_elapsed
 
         # A. Timer Logic (If time runs out, current turn loses)
@@ -153,8 +153,8 @@ def start_game(parent_frame, on_game_over):
                 mark = state["board"][r][c]
                 if mark != "":
                     cx, cy = (c * 200) + 100, 100 + (r * 200) + 100
-                    color = state["cursors"]["Team A"]["color"] if state["roles"]["Team A"] == mark else \
-                    state["cursors"]["Team B"]["color"]
+                    # Determines color by checking which team owns the placed mark
+                    color = state["cursors"]["Team A"]["color"] if state["roles"]["Team A"] == mark else state["cursors"]["Team B"]["color"]
                     canvas.create_text(cx, cy, text=mark, fill=color, font=("Arial", 100, "bold"), tags="dynamic")
 
         for team in ["Team A", "Team B"]:
