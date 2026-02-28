@@ -36,7 +36,7 @@ def start_game(parent_frame, on_game_over):
     canvas = tk.Canvas(parent_frame, width=canvas_width, height=canvas_height, bg="black", highlightthickness=0)
     canvas.pack(expand=True)
 
-    # DRAW THE BOUNDING BOX (The Arena)
+    # DRAW THE BOUNDING BOX
     canvas.create_rectangle(
         0, 0, canvas_width, canvas_height,
         outline="white", width=border_thickness
@@ -59,7 +59,7 @@ def start_game(parent_frame, on_game_over):
             val_b = joysticks[1].get_axis(AXIS_LEFT_STICK_Y)
             state["paddle_b_y"] += val_b * paddle_speed
 
-        # B. Constrain Paddles (Keeping them inside the border)
+        # B. Constrain Paddles
         state["paddle_a_y"] = max(border_thickness, min(canvas_height - paddle_h - border_thickness, state["paddle_a_y"]))
         state["paddle_b_y"] = max(border_thickness, min(canvas_height - paddle_h - border_thickness, state["paddle_b_y"]))
 
@@ -67,17 +67,21 @@ def start_game(parent_frame, on_game_over):
         state["ball_x"] += state["ball_dx"]
         state["ball_y"] += state["ball_dy"]
 
-        # Wall Bounce (Adjusted for border thickness)
+        # Wall Bounce
         if state["ball_y"] <= border_thickness or state["ball_y"] >= canvas_height - ball_size - border_thickness:
             state["ball_dy"] *= -1
 
-        # D. Paddle Collision
+        # D. Paddle Collision with 1.5x Speed Multiplier
+        # Left Paddle (Team A)
         if state["ball_x"] <= 30 and state["paddle_a_y"] < state["ball_y"] + ball_size < state["paddle_a_y"] + paddle_h:
-            state["ball_dx"] *= -1
-            state["ball_x"] = 31
+            state["ball_dx"] *= -1.1 # Reverse and accelerate
+            state["ball_dy"] *= 1.1  # Accelerate vertical speed too
+            state["ball_x"] = 31     # Prevent getting stuck in paddle
 
+        # Right Paddle (Team B)
         if state["ball_x"] >= canvas_width - 40 and state["paddle_b_y"] < state["ball_y"] + ball_size < state["paddle_b_y"] + paddle_h:
-            state["ball_dx"] *= -1
+            state["ball_dx"] *= -1.1 # Reverse and accelerate
+            state["ball_dy"] *= 1.1  # Accelerate vertical speed too
             state["ball_x"] = canvas_width - 41
 
         # E. Scoring

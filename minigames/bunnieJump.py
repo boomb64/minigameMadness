@@ -7,31 +7,37 @@ import os
 
 # Mapping for Xbox Controllers
 AXIS_X = 0
-SPRITES = {"blue": {}, "pink": {}}
-
-
-def load_all_assets():
-    """Attempts to load images. If they fail, SPRITES will remain empty dictionaries."""
-    colors = ["blue", "pink"]
-    poses = ["crouch_left", "jump_left", "crouch_right", "jump_right"]
-
-    for color in colors:
-        for pose in poses:
-            # We use a relative path. This looks inside the folder where the script is.
-            file_path = os.path.join("assets", f"{color}_{pose}.png")
-            if os.path.exists(file_path):
-                try:
-                    img = Image.open(file_path).convert("RGBA").resize((60, 60))
-                    SPRITES[color][pose] = ImageTk.PhotoImage(img)
-                except Exception as e:
-                    print(f"Error rendering {file_path}: {e}")
-            else:
-                # This will print in your terminal to tell you exactly which file is missing
-                print(f"FILE NOT FOUND: {file_path}")
 
 
 def start_game(parent_frame, on_game_over):
+    # 1. Anchor the path to the directory where this script lives
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # 2. Attach sprites to parent_frame to prevent Tkinter garbage collection
+    parent_frame.sprites = {"blue": {}, "pink": {}}
+
+    def load_all_assets():
+        """Attempts to load images with absolute pathing."""
+        colors = ["blue", "pink"]
+        poses = ["crouch_left", "jump_left", "crouch_right", "jump_right"]
+
+        for color in colors:
+            for pose in poses:
+                # Use BASE_DIR to build the absolute path
+                file_path = os.path.join(BASE_DIR, "assets", f"{color}_{pose}.png")
+                if os.path.exists(file_path):
+                    try:
+                        # Resampling.LANCZOS added for cleaner scaling
+                        img = Image.open(file_path).convert("RGBA").resize((60, 60), Image.Resampling.LANCZOS)
+                        parent_frame.sprites[color][pose] = ImageTk.PhotoImage(img)
+                    except Exception as e:
+                        print(f"Error rendering {file_path}: {e}")
+                else:
+                    print(f"FILE NOT FOUND: {file_path}")
+
+    # Load assets securely onto the frame before starting
     load_all_assets()
+
     pygame.init()
     pygame.joystick.init()
     joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
@@ -110,11 +116,14 @@ def start_game(parent_frame, on_game_over):
 
         for team in ["A", "B"]:
             p = state[team]
+            # --- Output correct win strings ---
             if p["y"] < -WIN_HEIGHT:
-                end_game(f"Team {team}")
+                winner_str = "Blue Wins" if team == "A" else "Pink Wins"
+                end_game(winner_str)
                 return
             if p["y"] > p["cam"] + CANVAS_H:
-                end_game("Team B" if team == "A" else "Team A")
+                winner_str = "Pink Wins" if team == "A" else "Blue Wins"
+                end_game(winner_str)
                 return
 
         parent_frame.after(16, update_game)
@@ -137,12 +146,14 @@ def start_game(parent_frame, on_game_over):
         # Sprite logic
         pose = "jump" if p["vy"] < 0 else "crouch"
         sprite_key = f"{pose}_{p['facing']}"
-        img_obj = SPRITES[p["color"]].get(sprite_key)
+
+        # Pull from the attached dictionary
+        img_obj = parent_frame.sprites[p["color"]].get(sprite_key)
 
         if img_obj:
             canvas.create_image(p["x"], p["y"] - off, image=img_obj, anchor="center")
         else:
-            # RECTANGLE FALLBACK: Shows player color if image is missing
+            # RECTANGLE FALLBACK
             canvas.create_rectangle(p["x"] - 15, (p["y"] - off) - 15, p["x"] + 15, (p["y"] - off) + 15, fill=p["color"],
                                     outline="white")
 

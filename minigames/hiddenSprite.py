@@ -18,7 +18,7 @@ def start_game(parent_frame, on_game_over):
     for joy in joysticks:
         joy.init()
 
-    P1_COLOR, P2_COLOR, BG_COLOR = "#0074D9", "#F012BE", "#00000"
+    P1_COLOR, P2_COLOR, BG_COLOR = "#0074D9", "#F012BE", "#000000"
 
     canvas = tk.Canvas(parent_frame, width=800, height=600, bg=BG_COLOR, highlightthickness=0)
     canvas.pack()

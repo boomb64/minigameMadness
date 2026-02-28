@@ -56,7 +56,7 @@ def start_game(parent_frame, on_game_over):
         joy.init()
 
     GRAVITY = 0.8 * SCALE
-    JUMP_POWER = -14 * (SCALE ** 0.5)
+    JUMP_POWER = -15 * (SCALE ** 0.5)
 
     container = tk.Frame(parent_frame, bg="black")
     container.pack(expand=True, fill="both")

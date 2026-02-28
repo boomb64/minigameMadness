@@ -34,8 +34,8 @@ def start_game(parent_frame, on_game_over):
     canvas.pack(pady=40)
 
     # The two halves of the bar
-    bar_a = canvas.create_rectangle(0, 0, canvas_w // 2, canvas_h, fill="cyan", outline="")
-    bar_b = canvas.create_rectangle(canvas_w // 2, 0, canvas_w, canvas_h, fill="magenta", outline="")
+    bar_a = canvas.create_rectangle(0, 0, canvas_w // 2, canvas_h, fill="magenta", outline="")
+    bar_b = canvas.create_rectangle(canvas_w // 2, 0, canvas_w, canvas_h, fill="cyan", outline="")
 
     # Center Marker
     canvas.create_line(canvas_w // 2, 0, canvas_w // 2, canvas_h, fill="white", width=3)

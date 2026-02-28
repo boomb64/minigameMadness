@@ -3,6 +3,7 @@ from PIL import Image, ImageTk
 import pygame
 import random
 import math
+import os
 
 # Mapping for Xbox Controllers
 BUTTON_A = 0
@@ -19,16 +20,22 @@ def start_game(parent_frame, on_game_over):
         joy.init()
 
     # --- ASSET LOADING ---
+    # 1. Anchor the path to the directory where pacman.py lives
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
     def load_sprite(path, size=(32, 32)):
+        full_path = os.path.join(BASE_DIR, path)
         try:
-            img = Image.open(path).resize(size, Image.Resampling.LANCZOS)
+            img = Image.open(full_path).resize(size, Image.Resampling.LANCZOS)
             return ImageTk.PhotoImage(img)
-        except:
+        except Exception as e:
+            print(f"Error loading {full_path}: {e}")
             return None
 
     GHOST_COLOR_KEYS = ["ghost_red", "ghost_cyan", "ghost_orange", "ghost_pink"]
 
-    sprites = {
+    # 2. Attach sprites to parent_frame to prevent Tkinter garbage collection
+    parent_frame.sprites = {
         "pac_open": load_sprite("assets/pac_open.png"),
         "pac_closed": load_sprite("assets/pac_closed.png"),
         "ghost_red": load_sprite("assets/ghost_red.png"),
@@ -117,14 +124,16 @@ def start_game(parent_frame, on_game_over):
                     if p["maze"][r][c] == 1:
                         canvas.create_rectangle(x1, y1, x1 + CELL_SIZE, y1 + CELL_SIZE, fill="#1919A6", outline="")
                     elif (r, c) in p["powers"]:
-                        if sprites["power"]: canvas.create_image(x1 + 17, y1 + 17, image=sprites["power"])
+                        # 3. Update dictionary references
+                        if parent_frame.sprites["power"]: canvas.create_image(x1 + 17, y1 + 17,
+                                                                              image=parent_frame.sprites["power"])
                     elif (r, c) in p["pellets"]:
                         canvas.create_oval(x1 + 15, y1 + 15, x1 + 19, y1 + 19, fill="#FFB8AE", outline="")
             for g in p["ghosts"]:
                 img_key = "ghost_dead" if p["power_timer"] > 0 else g["color"]
-                g_img = sprites.get(img_key)
+                g_img = parent_frame.sprites.get(img_key)
                 if g_img: canvas.create_image(g["x"] * CELL_SIZE + 17, g["y"] * CELL_SIZE + 17, image=g_img)
-            p_img = sprites["pac_open"] if is_open else sprites["pac_closed"]
+            p_img = parent_frame.sprites["pac_open"] if is_open else parent_frame.sprites["pac_closed"]
             if p_img: canvas.create_image(p["x"] * CELL_SIZE + 17, p["y"] * CELL_SIZE + 17, image=p_img)
 
     def check_inputs():
@@ -142,7 +151,7 @@ def start_game(parent_frame, on_game_over):
                 if 0 <= ty < ROWS and p["maze"][ty][tx] == 0:
                     p["vx"], p["vy"], p["x"] = 0, (MOVE_SPEED if raw_y > 0 else -MOVE_SPEED), round(p["x"])
 
-            p["x"] += p["vx"];
+            p["x"] += p["vx"]
             p["y"] += p["vy"]
             if p["x"] < -0.4:
                 p["x"] = COLS - 0.6
@@ -183,9 +192,16 @@ def start_game(parent_frame, on_game_over):
                         p["x"], p["y"], p["vx"], p["vy"] = 1.0, 1.0, 0, 0
 
         draw_screens()
+
+        # Win condition check
         if not state["players"][0]["pellets"] or not state["players"][1]["pellets"]:
-            winner = "PLAYER 1" if not state["players"][0]["pellets"] else "PLAYER 2"
-            end_game(f"{winner} WINS")
+            if not state["players"][0]["pellets"] and not state["players"][1]["pellets"]:
+                winner = "Tie"
+            elif not state["players"][0]["pellets"]:
+                winner = "Blue Wins"
+            else:
+                winner = "Pink Wins"
+            end_game(winner)
         else:
             parent_frame.after(16, check_inputs)
 

@@ -10,6 +10,9 @@ AXIS_X = 0
 
 
 def start_game(parent_frame, on_game_over):
+    # Anchor the path to this specific minigame's directory
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
     pygame.init()
     pygame.joystick.init()
     joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
@@ -23,7 +26,8 @@ def start_game(parent_frame, on_game_over):
 
     # --- IMAGE LOADING SECTION ---
     def load_img(name, size=(100, 140)):
-        path = os.path.join("assets", name)
+        # Apply the absolute pathing fix
+        path = os.path.join(BASE_DIR, "assets", name)
         try:
             img = Image.open(path).convert("RGBA")
             img = img.resize(size, Image.Resampling.LANCZOS)
@@ -34,8 +38,8 @@ def start_game(parent_frame, on_game_over):
             placeholder = Image.new('RGBA', size, color=(255, 0, 255, 100))
             return ImageTk.PhotoImage(placeholder)
 
-    # We load the lunge assets with a much larger width (180 vs 100)
-    assets = {
+    # Attach assets directly to parent_frame to stop garbage collection
+    parent_frame.assets = {
         "blue_idle": load_img("blue_idle.png"),
         "blue_block": load_img("blue_block.png"),
         "blue_lunge": load_img("blue_lunge.png", size=(180, 140)),  # INCREASED SIZE
@@ -64,8 +68,8 @@ def start_game(parent_frame, on_game_over):
     }
 
     # P1 anchored South-West (grows right), P2 anchored South-East (grows left)
-    p1_gfx = canvas.create_image(state["p1_pos"], 350, image=assets["blue_idle"], anchor="sw")
-    p2_gfx = canvas.create_image(state["p2_pos"], 350, image=assets["pink_idle"], anchor="se")
+    p1_gfx = canvas.create_image(state["p1_pos"], 350, image=parent_frame.assets["blue_idle"], anchor="sw")
+    p2_gfx = canvas.create_image(state["p2_pos"], 350, image=parent_frame.assets["pink_idle"], anchor="se")
 
     def check_inputs():
         if not state["active"]: return
@@ -117,17 +121,17 @@ def start_game(parent_frame, on_game_over):
         if not state["active"]: return
 
         # Select Sprites based on state
-        p1_img = assets["blue_idle"]
+        p1_img = parent_frame.assets["blue_idle"]
         if state["p1_lunge_timer"] > 0:
-            p1_img = assets["blue_lunge"]
+            p1_img = parent_frame.assets["blue_lunge"]
         elif state["p1_blocking"]:
-            p1_img = assets["blue_block"]
+            p1_img = parent_frame.assets["blue_block"]
 
-        p2_img = assets["pink_idle"]
+        p2_img = parent_frame.assets["pink_idle"]
         if state["p2_lunge_timer"] > 0:
-            p2_img = assets["pink_lunge"]
+            p2_img = parent_frame.assets["pink_lunge"]
         elif state["p2_blocking"]:
-            p2_img = assets["pink_block"]
+            p2_img = parent_frame.assets["pink_block"]
 
         # Update Visuals
         canvas.itemconfig(p1_gfx, image=p1_img)
@@ -163,10 +167,10 @@ def start_game(parent_frame, on_game_over):
     def animate_death(loser_id, winner_name):
         state["active"] = False
         if loser_id == "P1":
-            canvas.itemconfig(p1_gfx, image=assets["dead"], anchor="center")
+            canvas.itemconfig(p1_gfx, image=parent_frame.assets["dead"], anchor="center")
             canvas.move(p1_gfx, 0, 30)
         else:
-            canvas.itemconfig(p2_gfx, image=assets["dead"], anchor="center")
+            canvas.itemconfig(p2_gfx, image=parent_frame.assets["dead"], anchor="center")
             canvas.move(p2_gfx, 0, 30)
 
         parent_frame.after(1500, lambda: end_game(winner_name))

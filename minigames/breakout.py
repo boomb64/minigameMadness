@@ -56,6 +56,10 @@ def start_game(parent_frame, on_game_over):
                     brick_h
                 ))
 
+        # Pick one random brick per side to hold the hidden 3x multiplier
+        if state[team]["bricks"]:
+            random.choice(state[team]["bricks"]).is_hidden_mult = True
+
     canvas = tk.Canvas(parent_frame, width=CANVAS_W, height=CANVAS_H, bg="black", highlightthickness=0)
     canvas.pack(expand=True)
 
@@ -122,7 +126,13 @@ def start_game(parent_frame, on_game_over):
                             b["vy"] *= -ACCEL_FACTOR
 
                         t["bricks"].remove(brk)
-                        if random.random() < 0.25:
+
+                        # Trigger hidden multiplier OR normal drop
+                        if brk.is_hidden_mult:
+                            # Spawn 2 new balls with slight trajectory offsets
+                            t["balls"].append({"x": b["x"], "y": b["y"], "vx": b["vx"] + 1.5, "vy": b["vy"]})
+                            t["balls"].append({"x": b["x"], "y": b["y"], "vx": b["vx"] - 1.5, "vy": b["vy"]})
+                        elif random.random() < 0.25:
                             t["powerups"].append({"x": brk.x + brk.w / 2, "y": brk.y + brk.h / 2})
                         break
 
@@ -180,8 +190,9 @@ def start_game(parent_frame, on_game_over):
 
 
 class tkRect:
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, is_hidden_mult=False):
         self.x, self.y, self.w, self.h = x, y, w, h
+        self.is_hidden_mult = is_hidden_mult
 
     def collidepoint(self, px, py):
         return self.x <= px <= self.x + self.w and self.y <= py <= self.y + self.h

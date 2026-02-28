@@ -1,10 +1,10 @@
 import tkinter as tk
 import pygame
 
-# Mapping for Xbox Controllers (Standard)
-BUTTON_A = 0  # Green (Rock)
-BUTTON_B = 1  # Red (Paper)
-BUTTON_X = 2  # Blue (Scissors)
+# Mapping for Xbox Controllers
+BUTTON_A = 0  # Rock
+BUTTON_B = 1  # Paper
+BUTTON_X = 2  # Scissors
 
 
 def start_game(parent_frame, on_game_over):
@@ -17,15 +17,20 @@ def start_game(parent_frame, on_game_over):
         joy.init()
 
     # 2. Setup GUI
-    label = tk.Label(parent_frame, text="PICK YOUR MOVE IN SECRET!", font=("Arial", 24), fg="white", bg="black")
-    label.pack(pady=20)
+    # Using a main container to easily clear the screen for the end sequence
+    main_container = tk.Frame(parent_frame, bg="black")
+    main_container.pack(expand=True, fill="both")
 
-    instruction_label = tk.Label(parent_frame, text="A: Rock | B: Paper | X: Scissors", font=("Arial", 14), bg="black",
-                                 fg="gray")
-    instruction_label.pack()
+    label = tk.Label(main_container, text="PICK YOUR MOVE!", font=("Courier", 30, "bold"), fg="white", bg="black")
+    label.pack(pady=60)
 
-    status_label = tk.Label(parent_frame, text="Waiting for players...", font=("Arial", 18), bg="black", fg="yellow")
+    status_label = tk.Label(main_container, text="Waiting for players...", font=("Courier", 20), bg="black",
+                            fg="yellow")
     status_label.pack(pady=20)
+
+    instruction_label = tk.Label(main_container, text="A: Rock | B: Paper | X: Scissors", font=("Courier", 14),
+                                 bg="black", fg="gray")
+    instruction_label.pack(side="bottom", pady=40)
 
     state = {
         "p1_choice": None,
@@ -40,64 +45,88 @@ def start_game(parent_frame, on_game_over):
         p2 = state["p2_choice"]
 
         if p1 == p2:
-            return "Draw!"
+            return "Tie"
 
-        # Win conditions for P1
+        # Win conditions: Rock(0) beats Sci(2), Paper(1) beats Rock(0), Sci(2) beats Paper(1)
         if (p1 == 0 and p2 == 2) or (p1 == 1 and p2 == 0) or (p1 == 2 and p2 == 1):
-            return "Team A Wins!"
+            return "Team A"  # Player 1 (Blue)
         else:
-            return "Team B Wins!"
+            return "Team B"  # Player 2 (Pink)
 
     def run_countdown():
         if state["countdown"] > 0:
-            status_label.config(text=str(state["countdown"]), font=("Arial", 48), fg="red")
+            status_label.config(text=str(state["countdown"]), font=("Courier", 80, "bold"), fg="cyan")
             state["countdown"] -= 1
-            parent_frame.after(600, run_countdown)
+            parent_frame.after(800, run_countdown)
         else:
-            winner_text = determine_winner()
-            final_display = f"A: {state['moves'][state['p1_choice']]} vs B: {state['moves'][state['p2_choice']]}\n\n{winner_text}"
-            end_game(final_display)
+            status_label.config(text="SHOOT!", fg="white")
+            parent_frame.after(400, end_game)
 
     def check_inputs():
         if not state["active"]: return
 
         pygame.event.pump()
 
-        # Check Player 1 (Team A)
+        # Check Player 1 (Blue)
         if state["p1_choice"] is None and len(joysticks) > 0:
             for btn in [BUTTON_A, BUTTON_B, BUTTON_X]:
                 if joysticks[0].get_button(btn):
                     state["p1_choice"] = btn
 
-        # Check Player 2 (Team B)
+        # Check Player 2 (Pink)
         if state["p2_choice"] is None and len(joysticks) > 1:
             for btn in [BUTTON_A, BUTTON_B, BUTTON_X]:
                 if joysticks[1].get_button(btn):
                     state["p2_choice"] = btn
 
-        # Update Status
-        ready_text = ""
-        if state["p1_choice"] is not None: ready_text += "P1 READY "
-        if state["p2_choice"] is not None: ready_text += "| P2 READY"
-
-        if ready_text:
-            status_label.config(text=ready_text)
-
-        # If both chose, start countdown
-        if state["p1_choice"] is not None and state["p2_choice"] is not None:
+        # Visual feedback for choices
+        if state["p1_choice"] is not None and state["p2_choice"] is None:
+            status_label.config(text="P1 READY...", fg="blue")
+        elif state["p2_choice"] is not None and state["p1_choice"] is None:
+            status_label.config(text="P2 READY...", fg="pink")
+        elif state["p1_choice"] is not None and state["p2_choice"] is not None:
+            status_label.config(text="BOTH READY!", fg="green")
             state["active"] = False
-            run_countdown()
+            parent_frame.after(500, run_countdown)
+            return
+
+        parent_frame.after(16, check_inputs)
+
+    def end_game():
+        winner = determine_winner()
+
+        # CLEAR SCREEN (Pac-Man Style)
+        for widget in main_container.winfo_children():
+            widget.destroy()
+
+        # SETUP FINAL DISPLAY (Per instructions)
+        final_msg = ""
+        text_color = "yellow"
+
+        if winner == "Team A":
+            final_msg = "Blue Wins"
+            text_color = "blue"
+        elif winner == "Team B":
+            final_msg = "Pink Wins"
+            text_color = "pink"
         else:
-            parent_frame.after(16, check_inputs)
+            final_msg = "Tie"
+            text_color = "yellow"
 
-    def end_game(winner_msg):
-        # Pause briefly so players can see the result before the frame clears
-        parent_frame.after(2000, lambda: cleanup(winner_msg))
+        # Show winner text in center of black screen
+        tk.Label(main_container, text=final_msg, font=("Courier", 60, "bold"),
+                 fg=text_color, bg="black").place(relx=0.5, rely=0.5, anchor="center")
 
-    def cleanup(winner_msg):
+        # Final cleanup and return after 3 seconds
+        parent_frame.after(3000, lambda: cleanup_and_exit(winner))
+
+    def cleanup_and_exit(winner_text):
+        state["active"] = False
+        # Destroy all remaining widgets in the parent frame
         for widget in parent_frame.winfo_children():
             widget.destroy()
-        on_game_over(winner_msg)
+        # Trigger the runner's game-over callback
+        on_game_over(winner_text)
 
     # Start the input polling loop
     check_inputs()
