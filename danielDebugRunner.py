@@ -19,7 +19,7 @@ class GameDebugger:
 
         tk.Label(self.controls, text="Game Filename:", fg="white", bg="#333").pack(pady=(10, 0))
         self.entry = tk.Entry(self.controls)
-        self.entry.insert(0, "pong.py")  # Default suggestion
+        self.entry.insert(0, "masher.py")  # Default suggestion
         self.entry.pack(pady=5, padx=10)
 
         self.btn_run = tk.Button(self.controls, text="Load / Restart", command=self.load_game, bg="#4CAF50", fg="white")
