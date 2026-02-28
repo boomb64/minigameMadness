@@ -231,8 +231,7 @@ def start_game(parent_frame, on_game_over):
 
     def end_game(winner):
         state["active"] = False
-        for widget in parent_frame.winfo_children():
-            widget.destroy()
+        canvas.destroy()
         on_game_over(winner)
 
     check_inputs()
