@@ -9,8 +9,8 @@ import time
 
 # --- NETWORK CONFIGURATION ---
 PI_IPS = {
-    "Team A": "10.35.147.199",  # Blue Car Pi
-    "Team B": "192.168.1.11"  # Pink Car Pi
+    "Team A": "10.35.147.5",  # Blue Car Pi
+    "Team B": "10.35.147.5"  # Pink Car Pi
 }
 UDP_PORT = 5005
 
