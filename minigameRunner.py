@@ -123,16 +123,26 @@ class GameHandler:
         game_module.start_game(self.game_frame, self.handle_winner)
 
     def handle_winner(self, winner):
-        # Update persistent wins
-        if winner in self.total_wins:
-            self.total_wins[winner] += 1
-            self.update_score_display()
-
-        # Display Winner Screen
         self.clear_frame()
-        color = "cyan" if winner == "Team A" else "magenta"
-        tk.Label(self.game_frame, text=f"{winner.upper()} SCORES!", font=("Arial", 48, "bold"), fg=color,
-                 bg="black").pack(expand=True)
+
+        if winner == "Tie":
+            print("RESULT: TIE")
+            tk.Label(self.game_frame, text="IT'S A TIE!", font=("Arial", 48, "bold"), fg="yellow", bg="black").pack(expand=True)
+            # Scores are NOT updated, and the hardware voltage script is NOT pinged.
+        else:
+            print(f"WINNER: {winner}")
+            # Update persistent wins
+            if winner in self.total_wins:
+                self.total_wins[winner] += 1
+                self.update_score_display()
+
+            # Display Winner Screen
+            color = "cyan" if winner == "Team A" else "magenta"
+            tk.Label(self.game_frame, text=f"{winner.upper()} SCORES!", font=("Arial", 48, "bold"), fg=color,
+                     bg="black").pack(expand=True)
+
+            # --- THIS IS WHERE YOU PUSH TO YOUR VOLTAGE CONTROLLER / DATABASE ---
+            # e.g., send_voltage_boost(winner)
 
         # Loop directly back to launch_game (No countdown!)
         self.current_game_index += 1
