@@ -1,6 +1,7 @@
 import tkinter as tk
 import pygame
 import random
+import time
 
 # Xbox Button Mappings
 BTN_A = 0
@@ -9,7 +10,6 @@ BTN_X = 2
 BTN_Y = 3
 
 # Colors: (Dim Color, Lit Color)
-# Mapped to Xbox layout: A=Bottom/Green, B=Right/Red, X=Left/Blue, Y=Top/Yellow
 COLORS = {
     BTN_A: ("#004400", "#00FF00"),
     BTN_B: ("#440000", "#FF0000"),
@@ -32,23 +32,29 @@ def start_game(parent_frame, on_game_over):
         "round": 1,
         "max_rounds": 3,
         "sequence": [],
-        "phase": "WATCH",  # 'WATCH' or 'PLAY'
+        "phase": "WATCH",
         "a_idx": 0,
         "b_idx": 0,
+        "round_start_time": 0.0,
+        "time_limit": 4.0,  # 4 Seconds to input the sequence
+        "prev_a": {BTN_A: False, BTN_B: False, BTN_X: False, BTN_Y: False},
+        "prev_b": {BTN_A: False, BTN_B: False, BTN_X: False, BTN_Y: False}
     }
 
-    # Generate initial 4-button sequence
     state["sequence"] = [random.choice([BTN_A, BTN_B, BTN_X, BTN_Y]) for _ in range(4)]
 
     # 3. Setup GUI
     header = tk.Label(parent_frame, text="ROUND 1: WATCH THE CENTER", font=("Arial", 24, "bold"), fg="white",
                       bg="black")
-    header.pack(pady=20)
+    header.pack(pady=10)
+
+    # The new Timer Label
+    timer_label = tk.Label(parent_frame, text="", font=("Courier", 28, "bold"), fg="yellow", bg="black")
+    timer_label.pack(pady=5)
 
     arena_frame = tk.Frame(parent_frame, bg="black")
     arena_frame.pack(expand=True, fill="both")
 
-    # Three columns: Team A, Center (Pattern), Team B
     col_a = tk.Frame(arena_frame, bg="black")
     col_a.pack(side="left", expand=True, fill="both")
 
@@ -63,7 +69,6 @@ def start_game(parent_frame, on_game_over):
     tk.Label(col_b, text="TEAM B", font=("Arial", 18), fg="magenta", bg="black").pack(pady=10)
 
     def draw_diamond(parent_col):
-        """Draws 4 circles in a diamond shape and returns a dict mapping button to canvas ID."""
         canvas = tk.Canvas(parent_col, width=200, height=200, bg="black", highlightthickness=0)
         canvas.pack(expand=True)
 
@@ -71,7 +76,6 @@ def start_game(parent_frame, on_game_over):
         cx, cy = 100, 100
         offset = 55
 
-        # A=Bottom, B=Right, X=Left, Y=Top
         a = canvas.create_oval(cx - rad, cy + offset - rad, cx + rad, cy + offset + rad, fill=COLORS[BTN_A][0])
         b = canvas.create_oval(cx + offset - rad, cy - rad, cx + offset + rad, cy + rad, fill=COLORS[BTN_B][0])
         x = canvas.create_oval(cx - offset - rad, cy - rad, cx - offset + rad, cy + rad, fill=COLORS[BTN_X][0])
@@ -99,17 +103,17 @@ def start_game(parent_frame, on_game_over):
         if index < len(state["sequence"]):
             btn = state["sequence"][index]
             flash_button(canv_center, objs_center, btn, duration=400)
-            # Wait 600ms before showing the next button
             parent_frame.after(600, lambda: play_pattern(index + 1))
         else:
-            # Pattern finished showing, give control to players
             state["phase"] = "PLAY"
+            state["round_start_time"] = time.time()  # Start the timer!
             header.config(text="YOUR TURN! REPEAT THE PATTERN", fg="yellow")
             state["a_idx"] = 0
             state["b_idx"] = 0
 
     def start_round():
         state["phase"] = "WATCH"
+        timer_label.config(text="")  # Hide timer during watch phase
         header.config(text=f"ROUND {state['round']}: WATCH THE CENTER", fg="white")
         parent_frame.after(1000, lambda: play_pattern(0))
 
@@ -117,41 +121,76 @@ def start_game(parent_frame, on_game_over):
         if not state["active"]: return
 
         if state["phase"] == "PLAY":
+
+            # --- TIMER LOGIC ---
+            time_left = state["time_limit"] - (time.time() - state["round_start_time"])
+
+            if time_left <= 0:
+                timer_label.config(text="TIME: 0.0s", fg="red")
+
+                # Time's up! Check who actually finished.
+                a_done = (state["a_idx"] == len(state["sequence"]))
+                b_done = (state["b_idx"] == len(state["sequence"]))
+
+                if a_done and not b_done:
+                    end_game("Team A")
+                elif b_done and not a_done:
+                    end_game("Team B")
+                else:
+                    end_game("Tie")  # Neither finished (or both didn't finish, so it's a tie)
+                return
+            else:
+                timer_label.config(text=f"TIME: {time_left:.1f}s", fg="yellow")
+
+            # --- INPUT LOGIC ---
             pygame.event.pump()
-            for event in pygame.event.get():
-                if event.type == pygame.JOYBUTTONDOWN and event.button in [BTN_A, BTN_B, BTN_X, BTN_Y]:
+            buttons_to_check = [BTN_A, BTN_B, BTN_X, BTN_Y]
 
-                    # TEAM A LOGIC
-                    if event.joy == 0 and state["a_idx"] < len(state["sequence"]):
-                        expected = state["sequence"][state["a_idx"]]
-                        if event.button == expected:
-                            flash_button(canv_a, objs_a, event.button)
-                            state["a_idx"] += 1
-                        else:
-                            end_game("Team B")  # Team A messed up, Team B wins
-                            return
+            # TEAM A
+            if len(joysticks) > 0:
+                joy_a = joysticks[0]
+                for btn in buttons_to_check:
+                    current_pressed = joy_a.get_button(btn)
 
-                    # TEAM B LOGIC
-                    elif event.joy == 1 and state["b_idx"] < len(state["sequence"]):
-                        expected = state["sequence"][state["b_idx"]]
-                        if event.button == expected:
-                            flash_button(canv_b, objs_b, event.button)
-                            state["b_idx"] += 1
-                        else:
-                            end_game("Team A")  # Team B messed up, Team A wins
-                            return
+                    if current_pressed and not state["prev_a"][btn]:
+                        if state["a_idx"] < len(state["sequence"]):
+                            expected = state["sequence"][state["a_idx"]]
+                            if btn == expected:
+                                flash_button(canv_a, objs_a, btn)
+                                state["a_idx"] += 1
+                            else:
+                                end_game("Team B")  # Team A messed up instantly
+                                return
+                    state["prev_a"][btn] = current_pressed
 
-            # Check if both teams completed the sequence correctly
+            # TEAM B
+            if len(joysticks) > 1:
+                joy_b = joysticks[1]
+                for btn in buttons_to_check:
+                    current_pressed = joy_b.get_button(btn)
+
+                    if current_pressed and not state["prev_b"][btn]:
+                        if state["b_idx"] < len(state["sequence"]):
+                            expected = state["sequence"][state["b_idx"]]
+                            if btn == expected:
+                                flash_button(canv_b, objs_b, btn)
+                                state["b_idx"] += 1
+                            else:
+                                end_game("Team A")  # Team B messed up instantly
+                                return
+                    state["prev_b"][btn] = current_pressed
+
+            # Check if both teams completed the sequence correctly BEFORE time ran out
             if state["a_idx"] == len(state["sequence"]) and state["b_idx"] == len(state["sequence"]):
-                state["phase"] = "WATCH"  # Lock inputs
+                state["phase"] = "WATCH"
                 state["round"] += 1
 
                 if state["round"] > state["max_rounds"]:
                     end_game("Tie")  # Survived 3 rounds
                     return
                 else:
+                    timer_label.config(text="SUCCESS!", fg="green")
                     header.config(text="CORRECT! PREPARING NEXT ROUND...", fg="green")
-                    # Add one more button to the sequence
                     state["sequence"].append(random.choice([BTN_A, BTN_B, BTN_X, BTN_Y]))
                     parent_frame.after(1500, start_round)
 
@@ -163,6 +202,5 @@ def start_game(parent_frame, on_game_over):
             widget.destroy()
         on_game_over(winner)
 
-    # Start the first round shortly after loading
     parent_frame.after(500, start_round)
     check_inputs()
