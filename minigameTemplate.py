@@ -4,7 +4,6 @@ import pygame
 # Mapping for Xbox Controllers (Standard)
 BUTTON_A = 0
 
-
 def start_game(parent_frame, on_game_over):
     # 1. Initialize Pygame Joysticks
     pygame.init()
@@ -21,7 +20,15 @@ def start_game(parent_frame, on_game_over):
     score_label = tk.Label(parent_frame, text="Team A: 0 | Team B: 0", font=("Arial", 18), bg="black", fg="yellow")
     score_label.pack()
 
-    state = {"A": 0, "B": 0, "win_threshold": 20, "active": True}
+    # Added prev_a and prev_b for edge detection
+    state = {
+        "A": 0,
+        "B": 0,
+        "win_threshold": 20,
+        "active": True,
+        "prev_a": False,
+        "prev_b": False
+    }
 
     def update_scores():
         score_label.config(text=f"Team A: {state['A']} | Team B: {state['B']}")
@@ -29,25 +36,34 @@ def start_game(parent_frame, on_game_over):
     def check_inputs():
         if not state["active"]: return
 
-        # Process Pygame Events
-        for event in pygame.event.get():
-            if event.type == pygame.JOYBUTTONDOWN:
-                # Controller 0 = Team A, Controller 1 = Team B
-                if event.joy == 0 and event.button == BUTTON_A:
-                    state["A"] += 1
-                elif event.joy == 1 and event.button == BUTTON_A:
-                    state["B"] += 1
+        # A. Refresh internal Pygame state
+        pygame.event.pump()
 
-                update_scores()
+        # B. Direct Polling for Team A (Joy 0)
+        if len(joysticks) > 0:
+            current_a = joysticks[0].get_button(BUTTON_A)
+            # Edge detection: True NOW, False BEFORE
+            if current_a and not state["prev_a"]:
+                state["A"] += 1
+            state["prev_a"] = current_a
 
-        # Check for Winner
+        # C. Direct Polling for Team B (Joy 1)
+        if len(joysticks) > 1:
+            current_b = joysticks[1].get_button(BUTTON_A)
+            if current_b and not state["prev_b"]:
+                state["B"] += 1
+            state["prev_b"] = current_b
+
+        update_scores()
+
+        # D. Check for Winner
         if state["A"] >= state["win_threshold"]:
             end_game("Team A")
         elif state["B"] >= state["win_threshold"]:
             end_game("Team B")
         else:
-            # Re-run this check every 10ms (approx 100fps polling)
-            parent_frame.after(10, check_inputs)
+            # Re-run this check every 16ms (~60 FPS polling)
+            parent_frame.after(16, check_inputs)
 
     def end_game(winner):
         state["active"] = False
