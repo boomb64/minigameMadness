@@ -8,7 +8,7 @@ import socket
 # --- NETWORK CONFIGURATION ---
 # Replace these with the static IPs of your Raspberry Pis
 PI_IPS = {
-    "Team A": "192.168.1.10",  # Blue Car Pi
+    "Team A": "10.35.147.5",  # Blue Car Pi
     "Team B": "192.168.1.11"  # Pink Car Pi
 }
 UDP_PORT = 5005
