@@ -18,7 +18,7 @@ def load_all_assets():
     for color in colors:
         for pose in poses:
             # We use a relative path. This looks inside the folder where the script is.
-            file_path = os.path.join("minigames/assets", f"{color}_{pose}.png")
+            file_path = os.path.join("assets", f"{color}_{pose}.png")
             if os.path.exists(file_path):
                 try:
                     img = Image.open(file_path).convert("RGBA").resize((60, 60))
