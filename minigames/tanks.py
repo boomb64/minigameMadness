@@ -26,7 +26,7 @@ def start_game(parent_frame, on_game_over):
     canvas = tk.Canvas(parent_frame, width=WIDTH, height=HEIGHT, bg="#87CEEB", highlightthickness=0)
     canvas.pack()
 
-    # 1. Setup Deformable Terrain (List of Y-values for every X pixel)
+    # Setup Deformable Terrain
     terrain = [GROUND_Y] * WIDTH
 
     state = {
@@ -35,32 +35,33 @@ def start_game(parent_frame, on_game_over):
             {"x": 100, "angle": -45, "color": P1_COLOR, "prev_a": False},
             {"x": 700, "angle": -135, "color": P2_COLOR, "prev_a": False}
         ],
-        "bullets": [],  # List of {x, y, vx, vy, owner}
-        "explosions": []  # List of {x, y, r, life}
+        "bullets": [],
+        "explosions": []
     }
 
     def fire_bullet(idx):
         t = state["tanks"][idx]
-        # Calculate start pos based on angle
         rad = math.radians(t["angle"])
-        # High speed for "fairly quick" flight
-        speed = 12
+        speed = 13  # Slightly faster for better feel
+
+        # Start at the end of the barrel
+        barrel_len = 25
+        start_x = t["x"] + math.cos(rad) * barrel_len
+        start_y = (terrain[int(t["x"])] - 20) + math.sin(rad) * barrel_len
+
         state["bullets"].append({
-            "x": t["x"],
-            "y": terrain[int(t["x"])] - 15,
+            "x": start_x,
+            "y": start_y,
             "vx": math.cos(rad) * speed,
             "vy": math.sin(rad) * speed,
             "owner": idx
         })
 
     def create_explosion(x, y):
-        radius = 35
-        state["explosions"].append({"x": x, "y": y, "r": radius, "life": 10})
-
-        # Deform Terrain: Lower the ground within the radius
+        radius = 40
+        state["explosions"].append({"x": x, "y": y, "r": radius, "life": 12})
         for tx in range(max(0, int(x - radius)), min(WIDTH, int(x + radius))):
             dist = abs(tx - x)
-            # Circular carve depth
             depth = math.sqrt(max(0, radius ** 2 - dist ** 2))
             if y + depth > terrain[tx]:
                 terrain[tx] = max(terrain[tx], y + depth)
@@ -68,39 +69,36 @@ def start_game(parent_frame, on_game_over):
     def update_physics():
         if not state["active"]: return
 
-        # Update Bullets
         for b in state["bullets"][:]:
             b["x"] += b["vx"]
             b["y"] += b["vy"]
             b["vy"] += GRAVITY
 
-            # 1. Check Bullet vs Bullet (Midair)
+            # Bullet vs Bullet
             for other in state["bullets"]:
-                if b != other:
-                    if math.hypot(b["x"] - other["x"], b["y"] - other["y"]) < 10:
-                        create_explosion(b["x"], b["y"])
-                        if b in state["bullets"]: state["bullets"].remove(b)
-                        if other in state["bullets"]: state["bullets"].remove(other)
-                        break
+                if b != other and math.hypot(b["x"] - other["x"], b["y"] - other["y"]) < 12:
+                    create_explosion(b["x"], b["y"])
+                    if b in state["bullets"]: state["bullets"].remove(b)
+                    if other in state["bullets"]: state["bullets"].remove(other)
+                    break
 
-            # 2. Check Bullet vs Terrain
+            # Bullet vs Terrain
             if 0 <= int(b["x"]) < WIDTH:
                 if b["y"] >= terrain[int(b["x"])]:
                     create_explosion(b["x"], b["y"])
                     if b in state["bullets"]: state["bullets"].remove(b)
                     continue
 
-            # 3. Check Bullet vs Tanks (Direct Hit)
+            # Bullet vs Tanks
             for i, tank in enumerate(state["tanks"]):
-                if math.hypot(b["x"] - tank["x"], b["y"] - terrain[int(tank["x"])]) < 20:
+                if math.hypot(b["x"] - tank["x"], b["y"] - (terrain[int(tank["x"])] - 15)) < 25:
                     end_game(f"Player {2 if i == 0 else 1} Wins!")
                     return
 
-            # Out of bounds
             if b["y"] > HEIGHT or b["x"] < 0 or b["x"] > WIDTH:
                 if b in state["bullets"]: state["bullets"].remove(b)
 
-        # Check Explosion Radius vs Tanks
+        # Explosion Radius vs Tanks
         for exp in state["explosions"]:
             for i, tank in enumerate(state["tanks"]):
                 if math.hypot(exp["x"] - tank["x"], exp["y"] - terrain[int(tank["x"])]) < exp["r"]:
@@ -112,32 +110,39 @@ def start_game(parent_frame, on_game_over):
     def draw():
         canvas.delete("all")
 
-        # Draw Terrain
+        # Terrain
         points = [0, HEIGHT]
-        for x in range(WIDTH):
-            points.extend([x, terrain[x]])
+        for x in range(WIDTH): points.extend([x, terrain[x]])
         points.extend([WIDTH, HEIGHT])
-        canvas.create_polygon(points, fill="#654321", outline="#3d2b1f")
+        canvas.create_polygon(points, fill="#5d4037", outline="#3e2723")
 
-        # Draw Tanks
+        # Tanks
         for t in state["tanks"]:
             tx = int(t["x"])
             ty = terrain[tx]
-            # Body
-            canvas.create_rectangle(tx - 15, ty - 10, tx + 15, ty, fill=t["color"])
-            # Barrel
+
+            # 1. Treads (Darker version of player color)
+            canvas.create_oval(tx - 22, ty - 8, tx + 22, ty + 2, fill="#333333")
+
+            # 2. Main Hull
+            canvas.create_rectangle(tx - 20, ty - 18, tx + 20, ty - 5, fill=t["color"], outline="black")
+
+            # 3. Turret (Top part)
+            canvas.create_oval(tx - 12, ty - 25, tx + 12, ty - 12, fill=t["color"], outline="black")
+
+            # 4. Rotating Barrel
             rad = math.radians(t["angle"])
-            bx, by = tx + math.cos(rad) * 20, (ty - 5) + math.sin(rad) * 20
-            canvas.create_line(tx, ty - 5, bx, by, fill="black", width=4)
+            bx, by = tx + math.cos(rad) * 28, (ty - 20) + math.sin(rad) * 28
+            canvas.create_line(tx, ty - 20, bx, by, fill="black", width=6)
 
-        # Draw Bullets
+        # Bullets
         for b in state["bullets"]:
-            canvas.create_oval(b["x"] - 3, b["y"] - 3, b["x"] + 3, b["y"] + 3, fill="black")
+            canvas.create_oval(b["x"] - 4, b["y"] - 4, b["x"] + 4, b["y"] + 4, fill="black")
 
-        # Draw Explosions
+        # Explosions
         for e in state["explosions"]:
-            canvas.create_oval(e["x"] - e["r"], e["y"] - e["r"], e["x"] + e["r"], e["y"] + e["r"], fill="orange",
-                               outline="red")
+            canvas.create_oval(e["x"] - e["r"], e["y"] - e["r"], e["x"] + e["r"], e["y"] + e["r"],
+                               fill="orange", outline="yellow", width=2)
 
     def game_loop():
         if not state["active"]: return
@@ -145,15 +150,16 @@ def start_game(parent_frame, on_game_over):
 
         for i in range(min(len(joysticks), 2)):
             joy = joysticks[i]
-            # Tank Movement (Left/Right)
+
+            # Movement
             move = joy.get_axis(AXIS_LX)
             if abs(move) > 0.1:
-                state["tanks"][i]["x"] = max(20, min(WIDTH - 20, state["tanks"][i]["x"] + move * 4))
+                state["tanks"][i]["x"] = max(25, min(WIDTH - 25, state["tanks"][i]["x"] + move * 3.5))
 
-            # Aiming (Up/Down)
+            # Aiming (Clamped between -180 and 0)
             aim = joy.get_axis(AXIS_LY)
             if abs(aim) > 0.1:
-                state["tanks"][i]["angle"] += aim * 3
+                state["tanks"][i]["angle"] = max(-180, min(0, state["tanks"][i]["angle"] + aim * 2.5))
 
             # Firing
             btn = joy.get_button(BUTTON_A)
