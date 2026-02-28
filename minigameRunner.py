@@ -9,7 +9,7 @@ import time
 
 # --- NETWORK CONFIGURATION ---
 PI_IPS = {
-    "Team A": "10.35.147.199",  # Blue Car Pi
+    "Team A": "10.35.147.5",  # Blue Car Pi
     "Team B": "10.35.147.199"  # Pink Car Pi
 }
 UDP_PORT = 5005
@@ -66,27 +66,43 @@ class GameHandler:
         while self.drive_active:
             pygame.event.pump()
 
-            # Team A (Blue Car) - Controller Index 2
+            # --- TEAM A (BLUE CAR) - Controller Index 2 ---
             if len(self.joysticks) >= 3:
-                x = self.joysticks[2].get_axis(0)
-                y = -self.joysticks[2].get_axis(1)  # Flip Y for drive
-                packet = f"{x:.2f},{y:.2f}".encode('utf-8')
+                # Issue: X (Left/Right) was driving forward.
+                # Logic: We keep Y as is, but we'll try inverting X to trigger
+                # the Pi's differential steering threshold.
+                joy_x = self.joysticks[2].get_axis(0)
+                joy_y = self.joysticks[2].get_axis(1)
+
+                send_x = -joy_x  # Flip X to stop it from just adding to forward thrust
+                send_y = joy_y
+
+                packet = f"{send_x:.2f},{send_y:.2f}".encode('utf-8')
                 try:
                     sock.sendto(packet, (PI_IPS["Team A"], UDP_PORT))
                 except:
                     pass
 
-            # Team B (Pink Car) - Controller Index 3
+            # --- TEAM B (PINK CAR) - Controller Index 3 ---
             if len(self.joysticks) >= 4:
-                x = self.joysticks[3].get_axis(0)
-                y = -self.joysticks[3].get_axis(1)
-                packet = f"{x:.2f},{y:.2f}".encode('utf-8')
+                # Issue: Forward/Back was turning. Left/Right was turning.
+                # Report: Forward -> Right, Back -> Left, Left -> Left, Right -> Right
+                # Logic: Your Hub Y is hitting the Car X. Your Hub X is also hitting Car X.
+                joy_x = self.joysticks[3].get_axis(0)
+                joy_y = self.joysticks[3].get_axis(1)
+
+                # SWAP AXES: We move the Hub's Y stick to the Car's Y channel
+                # and the Hub's X stick to the Car's X channel.
+                send_x = joy_x
+                send_y = joy_y  # Moving Y stick to Y channel
+
+                packet = f"{send_x:.2f},{send_y:.2f}".encode('utf-8')
                 try:
                     sock.sendto(packet, (PI_IPS["Team B"], UDP_PORT))
                 except:
                     pass
 
-            time.sleep(0.02)  # 50Hz update rate for smooth steering
+            time.sleep(0.02)
 
     def initialize_weights(self):
         if not os.path.exists(self.games_dir): os.makedirs(self.games_dir)
@@ -95,15 +111,11 @@ class GameHandler:
             if game not in self.game_weights: self.game_weights[game] = 10
 
     def pick_next_game(self):
-        self.initialize_weights()
-        population = list(self.game_weights.keys())
-        weights = list(self.game_weights.values())
-        if not population: return None
+        if not hasattr(self, 'game_deck') or not self.game_deck:
+            self.game_deck = [f[:-3] for f in os.listdir(self.games_dir) if f.endswith(".py") and f != "__init__.py"]
+            random.shuffle(self.game_deck)
 
-        selection = random.choices(population, weights=weights, k=1)[0]
-        for game in self.game_weights:
-            self.game_weights[game] = 1 if game == selection else self.game_weights[game] + 1
-        return selection
+        return self.game_deck.pop() if self.game_deck else None
 
     def send_win_network_signal(self, winner):
         if winner in PI_IPS:
