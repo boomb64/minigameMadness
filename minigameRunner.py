@@ -27,6 +27,7 @@ class GameHandler:
         self.refresh_joysticks()
 
         self.total_wins = {"Team A": 0, "Team B": 0}
+        self.current_power = 0.4  # Starts low
         self.games_dir = "minigames"
         self.game_weights = {}
         self.initialize_weights()
@@ -47,7 +48,6 @@ class GameHandler:
         self.game_frame.pack(expand=True, fill="both")
 
         # --- START NETWORK DRIVE THREAD ---
-        # This thread runs forever, sending data from Joysticks 2 & 3 to the Pis
         self.drive_active = True
         self.drive_thread = threading.Thread(target=self.network_drive_loop, daemon=True)
         self.drive_thread.start()
@@ -61,42 +61,56 @@ class GameHandler:
         print(f"HUB: {len(self.joysticks)} Controllers detected.")
 
     def network_drive_loop(self):
-        """Background thread: Forwards Joystick 2 & 3 inputs to the physical cars."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        def apply_deadzone(value, deadzone=0.20):
+            return 0.0 if abs(value) < deadzone else value
+
         while self.drive_active:
             pygame.event.pump()
 
-            # --- TEAM A (BLUE CAR) - Controller Index 2 ---
-            if len(self.joysticks) >= 3:
-                # Issue: X (Left/Right) was driving forward.
-                # Logic: We keep Y as is, but we'll try inverting X to trigger
-                # the Pi's differential steering threshold.
-                joy_x = self.joysticks[2].get_axis(0)
-                joy_y = self.joysticks[2].get_axis(1)
+            # --- TEAM A (BLUE CAR) - Using Joystick 0 ---
+            if len(self.joysticks) > 0:
+                joy_x = apply_deadzone(self.joysticks[3].get_axis(0))
+                joy_y = apply_deadzone(self.joysticks[3].get_axis(1))
 
-                send_x = -joy_x  # Flip X to stop it from just adding to forward thrust
-                send_y = joy_y
+                l_a, r_a = 0, 0
+                if joy_y < -0.2:
+                    l_a, r_a = -self.current_power, -self.current_power  # Forward
+                elif joy_y > 0.2:
+                    l_a, r_a = self.current_power, self.current_power  # Backward
 
-                packet = f"{send_x:.2f},{send_y:.2f}".encode('utf-8')
+                if joy_x > 0.2:
+                    r_a = 0  # Turn Right
+                elif joy_x < -0.2:
+                    l_a = 0  # Turn Left
+
+                packet = f"{l_a:.2f},{r_a:.2f}".encode('utf-8')
                 try:
                     sock.sendto(packet, (PI_IPS["Team A"], UDP_PORT))
                 except:
                     pass
 
-            # --- TEAM B (PINK CAR) - Controller Index 3 ---
-            if len(self.joysticks) >= 4:
-                # Issue: Forward/Back was turning. Left/Right was turning.
-                # Report: Forward -> Right, Back -> Left, Left -> Left, Right -> Right
-                # Logic: Your Hub Y is hitting the Car X. Your Hub X is also hitting Car X.
-                joy_x = self.joysticks[3].get_axis(0)
-                joy_y = self.joysticks[3].get_axis(1)
+            # --- TEAM B (PINK CAR) - Using Joystick 1 ---
+            if len(self.joysticks) > 1:
+                joy_x = apply_deadzone(self.joysticks[2].get_axis(0))
+                joy_y = apply_deadzone(self.joysticks[2].get_axis(1))
 
-                # SWAP AXES: We move the Hub's Y stick to the Car's Y channel
-                # and the Hub's X stick to the Car's X channel.
-                send_x = joy_x
-                send_y = joy_y  # Moving Y stick to Y channel
+                l_b, r_b = 0.0, 0.0
+                # FIXED: Changed l_b to match r_b so they spin the same way for straight flight
+                if joy_y < -0.2:
+                    l_b, r_b = -self.current_power, -self.current_power  # Forward
+                elif joy_y > 0.2:
+                    l_b, r_b = self.current_power, self.current_power  # Backward
 
-                packet = f"{send_x:.2f},{send_y:.2f}".encode('utf-8')
+                if joy_x > 0.2:
+                    r_b = 0  # Turn Right
+                elif joy_x < -0.2:
+                    l_b = 0  # Turn Left
+
+                # Note: If the motor is physically wired backwards,
+                # you can flip the sign here: f"{-l_b:.2f},{r_b:.2f}"
+                packet = f"{l_b:.2f},{r_b:.2f}".encode('utf-8')
                 try:
                     sock.sendto(packet, (PI_IPS["Team B"], UDP_PORT))
                 except:
@@ -111,11 +125,48 @@ class GameHandler:
             if game not in self.game_weights: self.game_weights[game] = 10
 
     def pick_next_game(self):
-        if not hasattr(self, 'game_deck') or not self.game_deck:
-            self.game_deck = [f[:-3] for f in os.listdir(self.games_dir) if f.endswith(".py") and f != "__init__.py"]
+        if getattr(self, 'game_deck', None) is None or len(self.game_deck) == 0:
+            self.game_deck = [
+                f[:-3] for f in os.listdir(self.games_dir)
+                if f.endswith(".py") and f != "__init__.py"
+            ]
             random.shuffle(self.game_deck)
-
         return self.game_deck.pop() if self.game_deck else None
+
+    def handle_winner(self, winner):
+        self.clear_frame()
+
+        if "Tie" in winner:
+            msg = "Tie"
+            color = "yellow"
+        else:
+            if "Player 1" in winner or "Blue" in winner or "Team A" in winner:
+                winner_team = "Team A"
+                msg = "Blue Wins"
+                color = "#0074D9"
+            else:
+                winner_team = "Team B"
+                msg = "Pink Wins"
+                color = "#F012BE"
+
+            self.total_wins[winner_team] += 1
+
+            # Ramp up power globally on win, maxing out at 1.0 (100%)
+            if self.current_power < 1.0:
+                self.current_power = round(self.current_power + 0.1, 2)
+
+            self.update_score_display()
+            self.send_win_network_signal(winner_team)
+
+        tk.Label(
+            self.game_frame,
+            text=msg,
+            font=("Impact", 60),
+            fg=color,
+            bg="black"
+        ).pack(expand=True)
+
+        self.root.after(2000, self.launch_game)
 
     def send_win_network_signal(self, winner):
         if winner in PI_IPS:
@@ -178,24 +229,6 @@ class GameHandler:
         game_module = importlib.import_module(module_name)
         importlib.reload(game_module)
         game_module.start_game(self.game_frame, self.handle_winner)
-
-    def handle_winner(self, winner):
-        self.clear_frame()
-        if "Tie" in winner:
-            msg, color = "DRAW!", "white"
-        else:
-            if "Player 1" in winner or "Blue" in winner or "Team A" in winner:
-                winner = "Team A"
-            else:
-                winner = "Team B"
-
-            self.total_wins[winner] += 1
-            self.update_score_display()
-            self.send_win_network_signal(winner)
-            msg, color = f"{winner.upper()} SCORES!", ("#0074D9" if winner == "Team A" else "#F012BE")
-
-        tk.Label(self.game_frame, text=msg, font=("Impact", 60), fg=color, bg="black").pack(expand=True)
-        self.root.after(2000, self.launch_game)
 
 
 if __name__ == "__main__":
